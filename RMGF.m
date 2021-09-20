@@ -1,4 +1,4 @@
-function [A] = RMGF(SimMatrix, labels, img, Imgpca)
+function [A] = RMGF(SimMatrix, labels, Imgpca)
 spNO = max(labels(:));
 L = size(SimMatrix{1},1);
 meanvals = zeros(1,spNO);
