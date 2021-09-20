@@ -3,8 +3,21 @@ close all,clc;
 addpath(genpath(cd));
 dataPath = 'HyperData';
 
-% method = {'KNN','SVM','LDA'}
-method = {'SVM'};
+% method = {'KNN','SVM','LDA'};%'RF','ELM'};
+method = {'KNN'};
+
+% for imethod = 1:length(method)
+%     switch method{imethod}
+%         case 'KNN'
+%             lambdaa   = [3]; % 3NN
+%         case 'SVM'
+%             lambdaa   = [10000]; % SVM
+%         case 'RF'
+%             lambdaa   = [100];
+%         case 'ELM'
+%             lambdaa   = 2.^[8 10 12 14]; % elm
+%     end
+% end
 
 data = 'Indian_pines';% PaviaU Salinas_corrected Indian_pines_corrected
 %% load data
@@ -41,16 +54,15 @@ end
 [W, H, L]=size(img_src);
 img_src = double(img_src);
 % img_src = reshape(img_src, W * H, L);
-
 %% band selection
 tic
-% smoothing
+%smoothing
 for i=1:size(img_src,3);
     img_src(:,:,i) = imfilter(img_src(:,:,i),fspecial('average'));
 end
 
 SegPara = 2000;
-Ratio = 0.0664; % 
+Ratio = 0.0664; %  paviaU
 % superpixel segmentation
 [labels, Imgpca]= cubseg(img_src,SegPara*Ratio);
 img=[];
@@ -59,7 +71,7 @@ for i = 1 : L
 end
 
 %  Caculate similarity matrices
-knn = 16; %16; Adjust this parameter can get better results
+knn = 16; %16; % You can change this value to get better results
 sigma = 0.6;
 SuperPixelNo = length(unique(labels))-1;
 SimMatrix = cell(1,SuperPixelNo);
@@ -73,19 +85,10 @@ for SuperIndex = 1:SuperPixelNo
     end
     %     FeaMatrix{SuperIndex} = TempFea;
     TempDis = pdist2(TempFea',TempFea','euclidean'); % n*d;
-    SimMatrix{SuperIndex} = convert2sim_knn(TempDis, knn, sigma);
+    SimMatrix{SuperIndex} = bs_convert2sim_knn(TempDis, knn, sigma);
 end
 %% fusion with diffusion
-para.mu = 0.3;
-para.max_iter_diffusion = 20;
-para.max_iter_alternating = 50;
-para.thres = 1e-3;
-para.is_sparse = 0;
-I = eye(size(SimMatrix{1}), 'single');
-
-para.beta = ones(length(SimMatrix), 1)/length(SimMatrix);
-para.lambda = 19;    % weight regularizor
-[A, ~, ~] = fusion(SimMatrix, I, para, labels, img);
+[A] = RMGF(SimMatrix, labels, Imgpca);
 BandK = [5:5:60];
     ResKNN = [];
     ResSVM = [];
@@ -94,6 +97,8 @@ for iBand = 1:length(BandK);
     K = BandK(iBand); % the number of selected bands K
     disp(['Band is ',num2str(K)]);
     CluRes=PridictLabel(A,K);
+    % CluRes = SpectralClustering(Sim,K);
+    % CluRes = kmeans(img', K, 'emptyaction','singleton'); % data: N*d
     img_src = reshape(img_src, W * H, L);
     img = reshape(img_src, W * H, L);
     Y = SelectBandFromClusRes(CluRes, K, img);
@@ -114,6 +119,7 @@ for iBand = 1:length(BandK);
             Predict_label = knnclassify(tstData',trnData',trnLab,3,'euclidean');
             acc = accuracy(tstLab, Predict_label, clsCnt, tstNum);
             ResKNN = [ResKNN,acc];
+            t=7;
         end
         if strcmp(method{iMethod},'SVM')
             model = svmtrain(trnLab', trnData', '-s 0 -t 1 -c 0.001 -w1 5 -w-1 0.01');
@@ -130,7 +136,14 @@ for iBand = 1:length(BandK);
             ResLDA = [ResLDA,acc];
             T = 9;
         end
-       
+        %         case 'ELM'
+        %             [TTrain,TTest,TrainAC,accur_ELM,TY,Predict_label] = elm_kernel([trainlabel_nl' DataTrain_nl],[testlabel' DataTest],1,lambda,'RBF_kernel',1);
+        
+        %         case 'RF'
+        %             Factor = TreeBagger(lambda, DataTrain, trainlabel_nl);
+        %             [Predict_label_temp,Scores] = predict(Factor, DataTest);
+        %             for ij=1:length(Predict_label_temp); Predict_label(ij) = str2num(Predict_label_temp{ij}); end;
+        
     end
     
 end
